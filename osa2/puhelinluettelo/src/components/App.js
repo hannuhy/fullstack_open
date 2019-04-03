@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Filter from './Filter';
 import PersonForm from './PersonForm';
 import PersonsList from './PersonsList';
+import Notification from './Notification';
 import personsService from '../services/persons';
 
 const App = () => {
@@ -9,6 +10,7 @@ const App = () => {
   const [ newName, setNewName ] = useState('');
   const [ newNumber, setNewNumber ] = useState('');
   const [ searchTerm, setSearchTerm ] = useState('');
+  const [ notification, setNotification ] = useState(null);
 
   useEffect(() => {
     personsService
@@ -31,11 +33,28 @@ const App = () => {
   }
 
   const handleDelete = (id) => {
-    const confirm = window.confirm("Are you sure you want to delete?");
+    const confirm = window.confirm("Haluatko varmasti poistaa?");
     if (confirm) {
       personsService
         .deletePerson(id)
         .then(() => {
+          setPersons(persons.filter(person => person.id !== id));
+          setNotification({
+            message: 'Poisto onnistui',
+            status: 'success'
+          });
+          setTimeout(() => {
+            setNotification(null)
+          }, 5000);
+        })
+        .catch(error => {
+          setNotification({
+            message: 'Henkilö oli jo poistettu',
+            status: 'error'
+          });
+          setTimeout(() => {
+            setNotification(null)
+          }, 5000);
           setPersons(persons.filter(person => person.id !== id));
         });
     }
@@ -52,7 +71,14 @@ const App = () => {
           .then(returnedPerson => {
             setPersons(persons.map(person => person.id !== newPerson.id ? person : returnedPerson));
             setNewName('');
-            setNewNumber(''); 
+            setNewNumber('');
+            setNotification({
+              message: 'Muokkaus onnistui',
+              status: 'success'
+            });
+            setTimeout(() => {
+              setNotification(null)
+            }, 5000); 
           })
       }
     } else {
@@ -62,6 +88,13 @@ const App = () => {
           setPersons(persons.concat(returnedPerson));
           setNewName('');
           setNewNumber('');
+          setNotification({
+            message: 'Lisäys onnistui',
+            status: 'success'
+          });
+          setTimeout(() => {
+            setNotification(null)
+          }, 5000);
         });
     }
   }
@@ -69,6 +102,9 @@ const App = () => {
   return (
     <div>
       <h2>Puhelinluettelo</h2>
+
+      <Notification notification={notification} status="success" />
+
       <Filter 
         term={searchTerm} 
         handleChange={handleSearchChange} 
