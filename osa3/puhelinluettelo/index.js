@@ -1,61 +1,63 @@
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
+const cors = require('cors');
+const Person = require('./models/person');
 
+app.use(express.static('build'));
+app.use(cors());
 app.use(bodyParser.json());
 
-morgan.token('body', function (req, res) { return req.method === 'POST' ? JSON.stringify(req.body) : '' });
+// logger
+morgan.token('body', (req) => { return req.method === 'POST' ? JSON.stringify(req.body) :  ''; });
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'));
 
-let persons = [
-  {
-    "name": "Arto HellasX",
-    "number": "040-123456",
-    "id": 1
-  },
-  {
-    "name": "Martti Tienari",
-    "number": "040-123456",
-    "id": 2
-  },
-  {
-    "name": "Lea Kutvonen",
-    "number": "040-123456",
-    "id": 3
-  },
-  {
-    "name": "Arto Järvinen",
-    "number": "040-123456",
-    "id": 4
-  }
-];
-
 app.get('/api/persons', (req, res) => {
-  res.json(persons);
+  Person.find({}).then(persons => {
+    res.json(persons.map(person => person.toJSON()));
+  });
 });
 
-app.get('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const person = persons.find(person => person.id === id);
-
-  if (person) {
-    res.json(person);
-  } else {
-    res.status(404).end();
-  }
+app.get('/api/persons/:id', (req, res, next) => {
+  Person.findById(req.params.id)
+    .then(person => {
+      if (person) {
+        res.json(person.toJSON());
+      } else {
+        res.status(404).end();
+      }
+    })
+    .catch(error => next(error));
 });
 
-app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id);
-  persons = persons.filter(person => person.id !== id);
-
-  res.status(204).end();
+app.delete('/api/persons/:id', (req, res, next) => {
+  Person.findByIdAndRemove(req.params.id)
+    .then(() => {
+      res.status(204).end();
+    })
+    .catch(error => next(error));
 });
 
-app.post('/api/persons', (req, res) => {
+app.put('/api/persons/:id', (req, res, next) => {
   const body = req.body;
-  
+  const person = {
+    name: body.name,
+    number: body.number
+  };
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then(updatedPerson => {
+      res.json(updatedPerson.toJSON());
+    })
+    .catch(error => next(error));
+});
+
+app.post('/api/persons', (req, res, next) => {
+  const body = req.body;
+
   if (!body.name) {
     return res.status(400).json({
       error: 'name missing'
@@ -64,35 +66,48 @@ app.post('/api/persons', (req, res) => {
     return res.status(400).json({
       error: 'number missing'
     });
-  } else if (persons.find(person => person.name === body.name)) {
-    return res.status(400).json({
-      error: 'name must be unique'
-    });
   }
 
-  const person = {
+
+  const person = new Person({
     name: body.name,
     number: body.number,
-    id: Math.floor(Math.random() * 99999999999)
-  }
-
-  persons = persons.concat(person);
-  res.json(person);
+  });
+  person.save().then(savedPerson => {
+    res.json(savedPerson.toJSON());
+  })
+    .catch(error => next(error));
 });
 
 app.get('/info', (req, res) => {
-  const html = `<div><p>Puheliluettelossa on ${persons.length} henkilön tiedot</p><p>${new Date().toISOString()}</p></div>`;
-  res.send(html);
+  Person.find({}).then(persons => {
+    const html = `<div><p>Puheliluettelossa on ${persons.length} henkilön tiedot</p><p>${new Date().toISOString()}</p></div>`;
+    res.send(html);
+  });
 });
 
 // no route handler for request url
 const unknownEndpoint = (request, response) => {
   response.status(404).send({ error: 'unknown endpoint' })
-}
+};
 app.use(unknownEndpoint);
 
-const PORT = 3001;
+// error handler
+const errorHandler = (error, request, response, next) => {
+  console.log('error: ', error);
+  console.error(error.message);
+
+  if (error.name === 'CastError' && error.kind === 'ObjectId') {
+    return response.status(400).send({ error: 'malformatted id' });
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message });
+  }
+
+  next(error);
+};
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-  
